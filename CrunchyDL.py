@@ -160,4 +160,5 @@ while True:
         os.rmdir("temp")
         print("Done, converting file to mp4...")
         done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
+        os.remove(filepath)
         print("Done!")
