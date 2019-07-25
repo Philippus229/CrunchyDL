@@ -8,4 +8,4 @@ Crunchyroll Downloader heavily inspired by the CR-Unblocker for Google Chrome (a
 No instructions required, it's self-explanatory
 
 ## TODO
-- Fix for audio not being in the generated video file
+- Fix for missing audio
