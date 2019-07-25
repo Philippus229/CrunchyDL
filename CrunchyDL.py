@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 username, password = open("credentials.cfg", "r").read().split("\n") if os.path.isfile("credentials.cfg") else (input("Username: "), input("Password: "))
 if not os.path.isfile("credentials.cfg"):
-    if input("Remember me (y/n): ").lower() == "y":
+    if input("Remember me? (y/n): ").lower() == "y":
         open("credentials.cfg", "w").write(f"{username}\n{password}")
 
 session = requests.Session()
