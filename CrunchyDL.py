@@ -147,7 +147,8 @@ while True:
             request.urlretrieve(chunklist[c][2:][:-1], f"temp/{c}.ts")
             print(f"{c+1} of {len(chunklist)} done...")
         print("Done, decoding and combining chunks...")
-        with open(os.path.join(file_dest, f"{currTitle}.ts"), "wb") as f0:
+        filepath = os.path.join(file_dest, f"{currTitle}.ts")
+        with open(filepath, "wb") as f0:
             tmpdirlen = len(os.listdir("temp"))
             for f1 in range(tmpdirlen):
                 f2 = open(os.path.join("temp", f"{f1}.ts"), "rb")
@@ -157,4 +158,6 @@ while True:
                 print(f"{f1+1} of {tmpdirlen} done...")
             f0.close()
         os.rmdir("temp")
+        print("Done, converting file to mp4...")
+        done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
         print("Done!")
