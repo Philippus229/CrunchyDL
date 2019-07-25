@@ -54,6 +54,7 @@ if localizeToUs():
             for s in range(len(seasonList)):
                 print(f"{s}: {seasonList[s][0]}")
             episodeList = seasonList[int(input("Season > "))][1]
+        episodeList = [(e[0], json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])) for e in episodeList]#NEW (temporary)
         episodesToDownload = []
         while True:
             print("-1: Start Download")
@@ -66,7 +67,8 @@ if localizeToUs():
                 episodesToDownload.append(episodeList[len(episodeList)-i-1])
         file_dest = input("Download destination: ")
         for e in episodesToDownload:
-            videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
+            #videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
+            videodata = e[1]#NEW (temporary)
             streams = videodata["streams"]
             currTitle = f"Episode {videodata['metadata']['display_episode_number']} - {videodata['metadata']['title']}"
             print(f"--------{currTitle}--------")
