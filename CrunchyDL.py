@@ -1,6 +1,6 @@
 from urllib.parse import quote
 from urllib import request
-import requests, random, json, os, time
+import requests, random, json, os, subprocess, time
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from bs4 import BeautifulSoup
@@ -124,7 +124,7 @@ if localizeToUs():
                 f0.close()
             os.rmdir("temp")
             print("Done, converting file to mp4...")
-            #done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
-            #os.remove(filepath)
+            done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
+            os.remove(filepath)
             print("Done!")
 print("Initialization failed!")
