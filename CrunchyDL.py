@@ -1,6 +1,6 @@
 from urllib.parse import quote
 from urllib import request
-import requests, random, json, os, subprocess
+import requests, random, json, os, time
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from bs4 import BeautifulSoup
@@ -85,7 +85,7 @@ if localizeToUs():
                 if sameLangForAll == None:
                     sameLangForAll = [False, subtitleList[i][0]][input("Use same subtitle language for all? (y/n): ").lower() == "y"]
             currURL = subtitleList[i][1]
-            test3 = session.get(currURL).text.split("\n")
+            test3 = [str(l)[2:][:-1] for l in request.urlopen(currURL).readlines()]
             availResolutions = [(test3[l].split(",RESOLUTION=")[1].split(",")[0], test3[l+1]) for l in range(len(test3)) if "#EXT-X-STREAM-INF" in test3[l]]
             i = 0
             if type(sameResForAll) == str:
@@ -97,6 +97,7 @@ if localizeToUs():
                 if sameResForAll == None:
                     sameResForAll = [False, availResolutions[i][0]][input("Use same resolution for all? (y/n): ").lower() == "y"]
             selected = availResolutions[i][1]
+            time.sleep(5)#TEST
             print("Downloading chunk list...")
             tmpcl = [str(l) for l in request.urlopen(selected).readlines()]
             keyurl = [l.split("URI=\"")[1].split("\"\\n")[0] for l in tmpcl if "#EXT-X-KEY:METHOD=AES-128" in l][0]
@@ -109,6 +110,7 @@ if localizeToUs():
             for c in range(len(chunklist)):
                 request.urlretrieve(chunklist[c][2:][:-1], f"temp/{c}.ts")
                 print(f"{c+1} of {len(chunklist)} done...")
+                time.sleep(1)#TEST
             print("Done, decoding and combining chunks...")
             filepath = os.path.join(file_dest, f"{currTitle}.ts")
             with open(filepath, "wb") as f0:
@@ -122,7 +124,7 @@ if localizeToUs():
                 f0.close()
             os.rmdir("temp")
             print("Done, converting file to mp4...")
-            done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
-            os.remove(filepath)
+            #done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
+            #os.remove(filepath)
             print("Done!")
 print("Initialization failed!")
