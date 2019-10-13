@@ -54,7 +54,7 @@ if localizeToUs():
             for s in range(len(seasonList)):
                 print(f"{s}: {seasonList[s][0]}")
             episodeList = seasonList[int(input("Season > "))][1]
-        episodeList = [(e[0], json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])) for e in episodeList]#NEW (temporary)
+        #episodeList = [(e[0], json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])) for e in episodeList]#NEW (temporary)
         episodesToDownload = []
         while True:
             print("-1: Start Download")
@@ -67,13 +67,13 @@ if localizeToUs():
                 episodesToDownload.append(episodeList[len(episodeList)-i-1])
         file_dest = input("Download destination: ")
         for e in episodesToDownload:
-            #videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
-            videodata = e[1]#NEW (temporary)
+            videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
+            #videodata = e[1]#NEW (temporary)
             streams = videodata["streams"]
             currTitle = f"Episode {videodata['metadata']['display_episode_number']} - {videodata['metadata']['title']}"
             print(f"--------{currTitle}--------")
             subtitleList = []
-            for s in [s0 for s0 in streams if s0["format"] == "adaptive_hls"]:
+            for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "trailer_hls"]]:
                 subtitleList.append((s["hardsub_lang"], s["url"]))
             i = 0
             if type(sameLangForAll) == str:
@@ -87,19 +87,21 @@ if localizeToUs():
             currURL = subtitleList[i][1]
             test3 = [str(l)[2:][:-1] for l in request.urlopen(currURL).readlines()]
             availResolutions = [(test3[l].split(",RESOLUTION=")[1].split(",")[0], test3[l+1]) for l in range(len(test3)) if "#EXT-X-STREAM-INF" in test3[l]]
-            i = 0
-            if type(sameResForAll) == str:
-                i = [r[0] for r in availResolutions].index(sameResForAll)
-            else:
-                for r in range(len(availResolutions)):
-                    print(f"{r}: {availResolutions[r][0]}")
-                i = int(input("Resolution > "))
-                if sameResForAll == None:
-                    sameResForAll = [False, availResolutions[i][0]][input("Use same resolution for all? (y/n): ").lower() == "y"]
-            selected = availResolutions[i][1]
-            time.sleep(5)#TEST
+            selected = ""
+            if len(availResolutions) > 0:
+                i = 0
+                if type(sameResForAll) == str:
+                    i = [r[0] for r in availResolutions].index(sameResForAll)
+                else:
+                    for r in range(len(availResolutions)):
+                        print(f"{r}: {availResolutions[r][0]}")
+                    i = int(input("Resolution > "))
+                    if sameResForAll == None:
+                        sameResForAll = [False, availResolutions[i][0]][input("Use same resolution for all? (y/n): ").lower() == "y"]
+                selected = availResolutions[i][1]
+                time.sleep(5)#TEST
             print("Downloading chunk list...")
-            tmpcl = [str(l) for l in request.urlopen(selected).readlines()]
+            tmpcl = [str(l) for l in request.urlopen(selected).readlines()] if len(availResolutions) > 0 else [f"  {l}\\n " for l in test3]
             keyurl = [l.split("URI=\"")[1].split("\"\\n")[0] for l in tmpcl if "#EXT-X-KEY:METHOD=AES-128" in l][0]
             key = request.urlopen(keyurl).read()
             print(key)
