@@ -74,7 +74,7 @@ if localizeToUs():
             print(f"--------{currTitle}--------")
             subtitleList = []
             for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "trailer_hls"]]:
-                subtitleList.append((s["hardsub_lang"], s["url"]))
+                subtitleList.append((f"{s['hardsub_lang']} ({s['format'][:-4]})".replace(" (adaptive)", ""), s["url"]))
             i = 0
             if type(sameLangForAll) == str:
                 i = [sl[0] for sl in subtitleList].index(sameLangForAll)
