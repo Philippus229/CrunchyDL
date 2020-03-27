@@ -26,7 +26,7 @@ def localizeToUs():
                                    "value": "enUS",
                                    "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
             if not "header_profile_dropdown" in session.get("https://crunchyroll.com").text:
-                data = session.get(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
+                data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
                 if data != None:
                     print(f"User logged in until {data['expires']}")
                 else:
