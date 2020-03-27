@@ -11,6 +11,7 @@ if not os.path.isfile("credentials.cfg"):
         open("credentials.cfg", "w").write(f"{username}\n{password}")
 
 session = requests.Session()
+session.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4093.3 Safari/537.36"}
 
 def localizeToUs():
     print("Fetching session id...")
