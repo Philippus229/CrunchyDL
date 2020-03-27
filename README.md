@@ -1,4 +1,4 @@
-For educational purposes only!
+<b>DISCLAIMER</b>: For educational purposes only!
 
 # CrunchyDL
 Crunchyroll Downloader heavily inspired by the CR-Unblocker for Google Chrome (also uses the same server)
