@@ -1,7 +1,7 @@
 <b>DISCLAIMER</b>: For educational purposes only!
 
 # CrunchyDL
-Crunchyroll Downloader heavily inspired by the CR-Unblocker for Google Chrome (also uses the same server)
+Crunchyroll Downloader heavily inspired by CR-Unblocker for Google Chrome (also uses the same server)
 
 ## Requirements
 - Python 3.x with pycryptodome, BeautifulSoup and requests
