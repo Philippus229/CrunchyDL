@@ -136,10 +136,11 @@ def downloadDash(url, fp):
         segs = [segToDict(s) for s in seg_tl.split("<S")[1:]]
         sn = 1
         num_segs = int(math.fsum([s["n"] for s in segs]))
+        print(f"Downloading {av} segments...")
         for si in range(len(segs)):
             for i in range(segs[si]["n"]):
-                print(f"Downloading {av} segment {sn} of {num_segs}...")
                 open(os.path.join(f"{av}_tmp", f"{av}{sn:04}.m4{av[0]}"), "wb").write(session.get(base_url+media.replace("$RepresentationID$",rep_id).replace("$Number$",str(start_num+sn-1))).content)
+                print(f"{sn} of {num_segs} done...")
                 sn += 1
     merge_clean(fp)
 
