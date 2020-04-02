@@ -1,6 +1,6 @@
 from urllib.parse import quote
 from urllib import request
-import requests, random, json, os, subprocess, time
+import requests, random, json, os, subprocess, math
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from bs4 import BeautifulSoup
@@ -34,6 +34,115 @@ def localizeToUs():
                     return False
             return True
 
+def downloadHLS(url, filepath, sameResForAll):
+    test3 = session.get(url).text.split("\n")
+    availResolutions = [(test3[l].split(",RESOLUTION=")[1].split(",")[0], test3[l+1]) for l in range(len(test3)) if "#EXT-X-STREAM-INF" in test3[l]]
+    selected = ""
+    if len(availResolutions) > 0:
+        i = 0
+        if type(sameResForAll) == str:
+            i = [r[0] for r in availResolutions].index(sameResForAll)
+        else:
+            for r in range(len(availResolutions)):
+                print(f"{r}: {availResolutions[r][0]}")
+            i = int(input("Resolution > "))
+            if sameResForAll == None:
+                sameResForAll = [False, availResolutions[i][0]][input("Use same resolution for all? (y/n): ").lower() == "y"]
+        selected = availResolutions[i][1]
+    print("Downloading chunk list...")
+    tmpcl = [str(l) for l in request.urlopen(selected).readlines()] if len(availResolutions) > 0 else [f"  {l}\\n " for l in test3]
+    keyurl = [l.split("URI=\"")[1].split("\"\\n")[0] for l in tmpcl if "#EXT-X-KEY:METHOD=AES-128" in l][0]
+    key = request.urlopen(keyurl).read()
+    print(key)
+    chunklist = [tmpcl[l+1].replace("\\n", "") for l in range(len(tmpcl)) if "#EXTINF" in tmpcl[l]]
+    print("Done, downloading chunks...")
+    if not os.path.isdir("temp"):
+        os.mkdir("temp")
+    for c in range(len(chunklist)):
+        request.urlretrieve(chunklist[c][2:][:-1], os.path.join("temp", f"{c}.ts"))
+        print(f"{c+1} of {len(chunklist)} done...")
+    print("Done, decoding and combining chunks...")
+    with open(filepath, "wb") as f0:
+        tmpdirlen = len(os.listdir("temp"))
+        for f1 in range(tmpdirlen):
+            f2 = open(os.path.join("temp", f"{f1}.ts"), "rb")
+            f0.write(unpad(AES.new(key, AES.MODE_CBC, iv=f2.read(16)).decrypt(f2.read()), AES.block_size))
+            f2.close()
+            os.remove(os.path.join("temp", f"{f1}.ts"))
+            print(f"{f1+1} of {tmpdirlen} done...")
+        f0.close()
+    os.rmdir("temp")
+    print("Done, converting file to mp4...")
+    done = subprocess.Popen(f'ffmpeg.exe -i "{filepath}" -c:v libx264 -c:a aac "{filepath[:-2]}mp4"', stdout=subprocess.PIPE, shell=True).wait()
+    os.remove(filepath)
+    print("Done!")
+    return sameResForAll
+
+def merge_clean(filepath):
+    for t in range(2):
+        av = ["audio","video"][t]
+        print(f"Merging {av} segments...")
+        with open(f"{av}.m4{av[0]}", "wb") as out:
+            for sfn in os.listdir(f"{av}_tmp"):
+                sfp = os.path.join(f"{av}_tmp", sfn)
+                out.write(open(sfp, "rb").read())
+                os.remove(sfp)
+            out.close()
+    print("Merging audio and video...")
+    if not os.path.isdir(os.path.dirname(filepath)):
+        os.mkdir(os.path.dirname(filepath))
+    done = subprocess.Popen(f'ffmpeg -i video.m4v -i audio.m4a -c:v copy -c:a copy "{filepath}"', stdout=subprocess.PIPE, shell=True).wait()
+    os.remove("audio.m4a")
+    os.remove("video.m4v")
+    print("Done!")
+
+def cut(string, cut0, cut1, rev=0):
+    return string.split(cut0)[not rev].split(cut1)[rev]
+
+def segToDict(seg):
+    tmp_dict = {s.split('="')[0]:int(cut(s,'="','"')) for s in seg.split(" ") if "=" in s}
+    tmp_dict["n"] = tmp_dict["r"]+1 if "r" in tmp_dict else 1
+    return tmp_dict
+
+def downloadDash(url, fp):
+    add_headers = {"Accept": "*/*",
+                   "Accept-Encoding": "gzip, deflate, br",
+                   "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+                   "Connection": "keep-alive",
+                   "Host": cut(url,"//","/"),
+                   "Origin": "https://static.crunchyroll.com",
+                   "Referer": "https://static.crunchyroll.com/",
+                   "Sec-Fetch-Dest": "empty",
+                   "Sec-Fetch-Mode": "cors",
+                   "Sec-Fetch-Site": "cross-site"}
+    data = session.get(url, headers=add_headers).text
+    open("test.mpd", "w").write(data)
+    base_url0 = cut(data,"<BaseURL>","</BaseURL>")
+    for t in range(2):
+        av = ["video","audio"][t]
+        if not os.path.isdir(f"{av}_tmp"):
+            os.mkdir(av+"_tmp")
+        a_set = [set_split.split("</AdaptationSet>")[0] for set_split in data.split("<AdaptationSet") if f'mimeType="{av}/mp4"' in set_split][0]
+        seg_tmp = cut(a_set, "<SegmentTemplate", "</SegmentTemplate>")
+        init = cut(seg_tmp,'initialization="','"')
+        media = cut(seg_tmp,'media="','"')
+        start_num =  int(cut(seg_tmp,'startNumber="','"'))
+        print("Quality options not implemented yet, defaulting to highest...") ###TODO
+        try: rep_id, base_url = sorted([(cut(r,'id="','"'), cut(r,"<BaseURL>","</BaseURL>"), int(cut(r,'bandwidth="','"'))) for r in a_set.split("<Representation")[1:]], key=lambda x: x[-1])[-1][:-1]
+        except: rep_id, base_url = sorted([(cut(r,'id="','"'), base_url0, int(cut(r,'bandwidth="','"'))) for r in a_set.split("<Representation")[1:]], key=lambda x: x[-1])[-1][:-1]
+        print(base_url+init.replace("$RepresentationID$", rep_id))
+        open(os.path.join(f"{av}_tmp", f"{av}0000.m4{av[0]}"), "wb").write(session.get(base_url+init.replace("$RepresentationID$", rep_id)).content)
+        seg_tl = cut(seg_tmp,"<SegmentTimeline>","</SegmentTimeline>")
+        segs = [segToDict(s) for s in seg_tl.split("<S")[1:]]
+        sn = 1
+        num_segs = int(math.fsum([s["n"] for s in segs]))
+        for si in range(len(segs)):
+            for i in range(segs[si]["n"]):
+                print(f"Downloading {av} segment {sn} of {num_segs}...")
+                open(os.path.join(f"{av}_tmp", f"{av}{sn:04}.m4{av[0]}"), "wb").write(session.get(base_url+media.replace("$RepresentationID$",rep_id).replace("$Number$",str(start_num+sn-1))).content)
+                sn += 1
+    merge_clean(fp)
+
 if localizeToUs():
     animeString = session.get("https://crunchyroll.com/videos/anime/alpha?group=all").text
     soup = BeautifulSoup(animeString, "html.parser")
@@ -55,7 +164,6 @@ if localizeToUs():
             for s in range(len(seasonList)):
                 print(f"{s}: {seasonList[s][0]}")
             episodeList = seasonList[int(input("Season > "))][1]
-        #episodeList = [(e[0], json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])) for e in episodeList]#NEW (temporary)
         episodesToDownload = []
         while True:
             print("-1: Start Download")
@@ -69,13 +177,14 @@ if localizeToUs():
         file_dest = input("Download destination: ")
         for e in episodesToDownload:
             videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
-            #videodata = e[1]#NEW (temporary)
+            #with open("videodata.json", "w", encoding="utf-8") as f:
+            #    json.dump(videodata, f, ensure_ascii=False, indent=4)
             streams = videodata["streams"]
             currTitle = f"Episode {videodata['metadata']['display_episode_number']} - {videodata['metadata']['title']}"
             print(f"--------{currTitle}--------")
             subtitleList = []
-            for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "trailer_hls"]]:
-                subtitleList.append((f"{s['hardsub_lang']} ({s['format'][:-4]})".replace(" (adaptive)", ""), s["url"]))
+            for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "adaptive_dash"]]:
+                subtitleList.append((f"{s['hardsub_lang']} ({s['format'].replace('adaptive_','')})", s["url"]))
             i = 0
             if type(sameLangForAll) == str:
                 i = [sl[0] for sl in subtitleList].index(sameLangForAll)
@@ -85,49 +194,9 @@ if localizeToUs():
                 i = int(input("Subtitle Language > "))
                 if sameLangForAll == None:
                     sameLangForAll = [False, subtitleList[i][0]][input("Use same subtitle language for all? (y/n): ").lower() == "y"]
-            currURL = subtitleList[i][1]
-            test3 = [str(l)[2:][:-1] for l in request.urlopen(currURL).readlines()]
-            availResolutions = [(test3[l].split(",RESOLUTION=")[1].split(",")[0], test3[l+1]) for l in range(len(test3)) if "#EXT-X-STREAM-INF" in test3[l]]
-            selected = ""
-            if len(availResolutions) > 0:
-                i = 0
-                if type(sameResForAll) == str:
-                    i = [r[0] for r in availResolutions].index(sameResForAll)
-                else:
-                    for r in range(len(availResolutions)):
-                        print(f"{r}: {availResolutions[r][0]}")
-                    i = int(input("Resolution > "))
-                    if sameResForAll == None:
-                        sameResForAll = [False, availResolutions[i][0]][input("Use same resolution for all? (y/n): ").lower() == "y"]
-                selected = availResolutions[i][1]
-                time.sleep(5)#TEST
-            print("Downloading chunk list...")
-            tmpcl = [str(l) for l in request.urlopen(selected).readlines()] if len(availResolutions) > 0 else [f"  {l}\\n " for l in test3]
-            keyurl = [l.split("URI=\"")[1].split("\"\\n")[0] for l in tmpcl if "#EXT-X-KEY:METHOD=AES-128" in l][0]
-            key = request.urlopen(keyurl).read()
-            print(key)
-            chunklist = [tmpcl[l+1].replace("\\n", "") for l in range(len(tmpcl)) if "#EXTINF" in tmpcl[l]]
-            print("Done, downloading chunks...")
-            if not os.path.isdir("temp"):
-                os.mkdir("temp")
-            for c in range(len(chunklist)):
-                request.urlretrieve(chunklist[c][2:][:-1], f"temp/{c}.ts")
-                print(f"{c+1} of {len(chunklist)} done...")
-                time.sleep(1)#TEST
-            print("Done, decoding and combining chunks...")
-            filepath = os.path.join(file_dest, f"{currTitle}.ts")
-            with open(filepath, "wb") as f0:
-                tmpdirlen = len(os.listdir("temp"))
-                for f1 in range(tmpdirlen):
-                    f2 = open(os.path.join("temp", f"{f1}.ts"), "rb")
-                    f0.write(unpad(AES.new(key, AES.MODE_CBC, iv=f2.read(16)).decrypt(f2.read()), AES.block_size))
-                    f2.close()
-                    os.remove(os.path.join("temp", f"{f1}.ts"))
-                    print(f"{f1+1} of {tmpdirlen} done...")
-                f0.close()
-            os.rmdir("temp")
-            print("Done, converting file to mp4...")
-            done = subprocess.Popen(f"ffmpeg.exe -i \"{filepath}\" -c:v libx264 -c:a aac \"{filepath[:-2]}mp4\"", stdout=subprocess.PIPE, shell=True).wait()
-            os.remove(filepath)
-            print("Done!")
+            subdata = subtitleList[i]
+            if subdata[0].endswith("(hls)"):
+                sameResForAll = downloadHLS(subdata[1], os.path.join(file_dest, f"{currTitle}.ts"), sameResForAll)
+            else:
+                downloadDash(subdata[1], os.path.join(file_dest, f"{currTitle}.mp4"))
 print("Initialization failed!")
