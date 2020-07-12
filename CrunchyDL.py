@@ -13,26 +13,34 @@ if not os.path.isfile("credentials.cfg"):
 session = requests.Session()
 session.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4093.3 Safari/537.36"}
 
+servers = ["https://cr-unblocker.us.to/start_session?version=1.1",
+           "https://api1.cr-unblocker.com/getsession.php?version=1.1",
+           "https://api1.cr-unblocker.com/getsession.php?version=1.1"]
+
 def localizeToUs():
     print("Fetching session id...")
-    res = session.get("https://api1.cr-unblocker.com/getsession.php?version=1.1")
-    if res:
-        sessionData = res.json()["data"]
-        if sessionData["country_code"] == "US":
-            print(f"Got session id, setting cookie {sessionData['session_id']}.")
-            session.cookies.set(**{"name": "session_id",
-                                   "value": sessionData["session_id"],
-                                   "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
-            session.cookies.set(**{"name": "c_locale",
-                                   "value": "enUS",
-                                   "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
-            if not "header_profile_dropdown" in session.get("https://crunchyroll.com").text:
-                data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
-                if data != None:
-                    print(f"User logged in until {data['expires']}")
-                else:
-                    return False
-            return True
+    for server in servers:
+        print(f"Trying to retrieve session id from {server.split('//')[1].split('/')[0]}...")
+        res = session.get(server)
+        if res:
+            sessionData = res.json()["data"]
+            if sessionData["country_code"] == "US":
+                print(f"Got session id, setting cookie {sessionData['session_id']}.")
+                session.cookies.set(**{"name": "session_id",
+                                       "value": sessionData["session_id"],
+                                       "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
+                session.cookies.set(**{"name": "c_locale",
+                                       "value": "enUS",
+                                       "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
+                if not "header_profile_dropdown" in session.get("https://crunchyroll.com").text:
+                    data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
+                    if data != None:
+                        print(f"User logged in until {data['expires']}")
+                    else:
+                        print("Failed")
+                        continue
+                return True
+        print("Failed")
 
 def downloadHLS(url, filepath, sameResForAll):
     test3 = session.get(url).text.split("\n")
