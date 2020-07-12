@@ -21,7 +21,8 @@ def localizeToUs():
     print("Fetching session id...")
     for server in servers:
         print(f"Trying to retrieve session id from {server.split('//')[1].split('/')[0]}...")
-        res = session.get(server)
+        try: res = session.get(server)
+        except: res = None
         if res:
             sessionData = res.json()["data"]
             if sessionData["country_code"] == "US":
