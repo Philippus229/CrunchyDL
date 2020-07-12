@@ -15,7 +15,7 @@ session.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Appl
 
 servers = ["https://cr-unblocker.us.to/start_session?version=1.1",
            "https://api1.cr-unblocker.com/getsession.php?version=1.1",
-           "https://api1.cr-unblocker.com/getsession.php?version=1.1"]
+           "https://api2.cr-unblocker.com/start_session?version=1.1"]
 
 def localizeToUs():
     print("Fetching session id...")
