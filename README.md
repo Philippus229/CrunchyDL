@@ -11,4 +11,7 @@ New version fixes problem with Crunchyroll apparently using captchas now (curren
 - ffmpeg.exe in the same folder as the Python script
 
 ## Usage
-No instructions required, it's self-explanatory (new version not so much, but you just have to change three variables at the start of the script)
+- <b>localizeToUS</b>: use american session id to get access to more content
+- <b>log_in</b>: log in or not (ignored in case of localization to US)
+- <b>dlmode</b>: set this to False if you just want to watch anime in the browser (f.e. in combination with localizeToUS)
+- <b>textmode</b>: set this to True for the console interface from the old version
