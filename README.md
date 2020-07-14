@@ -2,7 +2,7 @@
 
 # CrunchyDL
 Crunchyroll Downloader heavily inspired by CR-Unblocker for Google Chrome (also uses the same server).
-New version fixes problem with Crunchyroll apparently using captchas now.
+New version fixes problem with Crunchyroll apparently using captchas now (currently only supports HLS).
 ### TODO:
 - find a way to download fragments for mpeg-dash video (maybe use different library like selenium-requests?)
 
