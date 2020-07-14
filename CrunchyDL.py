@@ -1,50 +1,114 @@
+import os, math, json, time, shutil, requests, subprocess
 from urllib.parse import quote
 from urllib import request
-import requests, random, json, os, subprocess, math
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
-from bs4 import BeautifulSoup
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+
+localizeToUS = True
+log_in = False #False recommended for mpeg-dash and even then it's extremely slow (will (hopefully) soon be fixed)
+dlmode = True #True=download, False=watch in browser
+
+textmode = False
+file_dest = "test"#input("Output directory: ")
+if not os.path.isdir("tmp"): os.mkdir("tmp")
+
+options = Options()
+#options.add_argument("--headless")
+options.add_experimental_option("prefs", {
+    "download.default_directory": os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "tmp")).replace("/","\\"),
+    "download.prompt_for_download": False,
+    "download.directory_upgrade": True,
+    "safebrowsing.enabled": True
+})
+driver = webdriver.Chrome(options=options)
+
+session = requests.Session()
+session.headers.update({"User-Agent": driver.execute_script("return navigator.userAgent")})
 
 username, password = open("credentials.cfg", "r").read().split("\n") if os.path.isfile("credentials.cfg") else (input("Username: "), input("Password: "))
 if not os.path.isfile("credentials.cfg"):
     if input("Remember me? (y/n): ").lower() == "y":
         open("credentials.cfg", "w").write(f"{username}\n{password}")
 
-session = requests.Session()
-session.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4093.3 Safari/537.36"}
+servers = ["https://cr-unblocker.us.to/start_session?version=1.1"]
 
-servers = ["https://cr-unblocker.us.to/start_session?version=1.1",
-           "https://api1.cr-unblocker.com/getsession.php?version=1.1",
-           "https://api2.cr-unblocker.com/start_session?version=1.1"]
+def login():
+    if localizeToUS:
+        for server in servers:
+            try: sessionData = session.get(server).json()["data"]
+            except: sessionData = None
+            if sessionData and sessionData["country_code"] == "US":
+                session.cookies.set("session_id", sessionData["session_id"])
+                session.cookies.set("c_locale", "enUS")
+                data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
+                print(data)
+                if data:
+                    print("Logged in (US)!")
+                    driver.get("https://crunchyroll.com")
+                    for name, value in session.cookies.items():           #somehow this actually works pretty well
+                        driver.add_cookie({"name": name, "value": value}) #didn't think setting cookies would be enough
+                else:
+                    print("Login failed!")
+    else:
+        '''driver.get("https://crunchyroll.com/login")
+        driver.find_element_by_id("login_form_name").send_keys(username)
+        driver.find_element_by_id("login_form_password").send_keys(username)
+        driver.find_element_by_id("login_form_password").submit()'''
+        driver.get("https://www.crunchyroll.com")
+        for cookie in driver.get_cookies():
+            session.cookies.set(cookie["name"], cookie["value"])
+        data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={session.cookies['session_id']}&account={quote(username)}&password={quote(password)}").json()["data"]
+        for name, value in session.cookies.items():
+            driver.add_cookie({"name": name, "value": value})
+        print("Probably logged in!")
 
-def localizeToUs():
-    print("Fetching session id...")
-    for server in servers:
-        print(f"Trying to retrieve session id from {server.split('//')[1].split('/')[0]}...")
-        try: res = session.get(server)
-        except: res = None
-        if res:
-            sessionData = res.json()["data"]
-            if sessionData["country_code"] == "US":
-                print(f"Got session id, setting cookie {sessionData['session_id']}.")
-                session.cookies.set(**{"name": "session_id",
-                                       "value": sessionData["session_id"],
-                                       "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
-                session.cookies.set(**{"name": "c_locale",
-                                       "value": "enUS",
-                                       "domain": f"crunchyroll.com/videos/anime/alpha?group=all",})
-                if not "header_profile_dropdown" in session.get("https://crunchyroll.com").text:
-                    data = session.post(f"https://api.crunchyroll.com/login.0.json?session_id={sessionData['session_id']}&locale=enUS&account={quote(username)}&password={quote(password)}").json()["data"]
-                    if data != None:
-                        print(f"User logged in until {data['expires']}")
-                    else:
-                        print("Failed")
-                        continue
-                return True
-        print("Failed")
+if log_in or localizeToUS: login()
+
+def cut(string, cut0, cut1, rev=0):
+    return string.split(cut0)[1-rev].split(cut1)[rev]
+
+def segToDict(seg):
+    tmp_dict = {s.split('="')[0]:int(cut(s,'="','"')) for s in seg.split(" ") if "=" in s}
+    tmp_dict["n"] = tmp_dict["r"]+1 if "r" in tmp_dict else 1
+    return tmp_dict
+
+def retrieveURL0(url, mode="r", fp=None): #TODO: find a way to disable the video player in chrome
+    for f in os.listdir("tmp"): os.remove(os.path.join("tmp", f))
+    driver.get(url)
+    while len(os.listdir("tmp")) in [0,2]: time.sleep(0.5) #wait for download to finish
+    time.sleep(1)
+    filename = os.listdir("tmp")[-1]
+    content = open(os.path.join("tmp", filename), mode).read()
+    if fp: shutil.copyfile(os.path.join("tmp", filename), fp)
+    return content
+
+def retrieveURL1(url, mode="r", fp=None, headers={}):
+    for cookie in driver.get_cookies():
+        session.cookies.set(cookie["name"], cookie["value"])
+    res = session.get(url, headers=headers)
+    if fp: open(fp, "wb").write(res.content)
+    content = res.text if mode == "r" else res.content if mode == "rb" else res.text
+    return content
+
+def retrieveURL(url, mode="r", fp=None, thing=log_in):
+    return retrieveURL0(url, mode, fp) if thing else \
+           retrieveURL1(url, mode, fp,
+                        headers={"Accept": "*/*",
+                                 "Accept-Encoding": "gzip, deflate, br",
+                                 "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+                                 "Connection": "keep-alive",
+                                 "Host": cut(url,"//","/"),
+                                 "Origin": "https://static.crunchyroll.com",
+                                 "Referer": "https://static.crunchyroll.com/vilos-v2/web/vilos/player.html?control=1&advancedsettings=1",
+                                 "Sec-Fetch-Dest": "empty",
+                                 "Sec-Fetch-Mode": "cors",
+                                 "Sec-Fetch-Site": "cross-site"})
 
 def downloadHLS(url, filepath, sameResForAll):
-    test3 = session.get(url).text.split("\n")
+    test3 = retrieveURL(url, fp="test.m3u8", thing=True).split("\n")
     availResolutions = [(test3[l].split(",RESOLUTION=")[1].split(",")[0], test3[l+1]) for l in range(len(test3)) if "#EXT-X-STREAM-INF" in test3[l]]
     selected = ""
     if len(availResolutions) > 0:
@@ -105,28 +169,10 @@ def merge_clean(filepath):
     os.remove("video.m4v")
     print("Done!")
 
-def cut(string, cut0, cut1, rev=0):
-    return string.split(cut0)[not rev].split(cut1)[rev]
-
-def segToDict(seg):
-    tmp_dict = {s.split('="')[0]:int(cut(s,'="','"')) for s in seg.split(" ") if "=" in s}
-    tmp_dict["n"] = tmp_dict["r"]+1 if "r" in tmp_dict else 1
-    return tmp_dict
-
 def downloadDash(url, fp):
-    add_headers = {"Accept": "*/*",
-                   "Accept-Encoding": "gzip, deflate, br",
-                   "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-                   "Connection": "keep-alive",
-                   "Host": cut(url,"//","/"),
-                   "Origin": "https://static.crunchyroll.com",
-                   "Referer": "https://static.crunchyroll.com/",
-                   "Sec-Fetch-Dest": "empty",
-                   "Sec-Fetch-Mode": "cors",
-                   "Sec-Fetch-Site": "cross-site"}
-    data = session.get(url, headers=add_headers).text
-    open("test.mpd", "w").write(data)
-    base_url0 = cut(data,"<BaseURL>","</BaseURL>")
+    data = retrieveURL(url, fp="test.mpd")
+    base_url0 = cut(data,"<BaseURL>","</BaseURL>") if "<BaseURL>" in data \
+                else url.split("manifest.mpd")[0].replace("&amp;","&").replace("dl.","") #temporary, probably gonna make a dictionary (or try to figure out a way to read response headers with selenium (maybe switch to selenium-requests?))
     for t in range(2):
         av = ["video","audio"][t]
         if not os.path.isdir(f"{av}_tmp"):
@@ -140,7 +186,8 @@ def downloadDash(url, fp):
         try: rep_id, base_url = sorted([(cut(r,'id="','"'), cut(r,"<BaseURL>","</BaseURL>"), int(cut(r,'bandwidth="','"'))) for r in a_set.split("<Representation")[1:]], key=lambda x: x[-1])[-1][:-1]
         except: rep_id, base_url = sorted([(cut(r,'id="','"'), base_url0, int(cut(r,'bandwidth="','"'))) for r in a_set.split("<Representation")[1:]], key=lambda x: x[-1])[-1][:-1]
         print(base_url+init.replace("$RepresentationID$", rep_id))
-        open(os.path.join(f"{av}_tmp", f"{av}0000.m4{av[0]}"), "wb").write(session.get(base_url+init.replace("$RepresentationID$", rep_id)).content)
+        retrieveURL(base_url+init.replace("$RepresentationID$", rep_id),
+                    fp=os.path.join(f"{av}_tmp", f"{av}0000.m4{av[0]}"))
         seg_tl = cut(seg_tmp,"<SegmentTimeline>","</SegmentTimeline>")
         segs = [segToDict(s) for s in seg_tl.split("<S")[1:]]
         sn = 1
@@ -148,65 +195,72 @@ def downloadDash(url, fp):
         print(f"Downloading {av} segments...")
         for si in range(len(segs)):
             for i in range(segs[si]["n"]):
-                open(os.path.join(f"{av}_tmp", f"{av}{sn:04}.m4{av[0]}"), "wb").write(session.get(base_url+media.replace("$RepresentationID$",rep_id).replace("$Number$",str(start_num+sn-1))).content)
+                retrieveURL(base_url+media.replace("$RepresentationID$",rep_id).replace("$Number$",str(start_num+sn-1)),
+                            fp=os.path.join(f"{av}_tmp", f"{av}{sn:04}.m4{av[0]}"))
                 print(f"{sn} of {num_segs} done...")
                 sn += 1
     merge_clean(fp)
 
-if localizeToUs():
-    animeString = session.get("https://crunchyroll.com/videos/anime/alpha?group=all").text
-    soup = BeautifulSoup(animeString, "html.parser")
-    animeList = [(a["title"], a["href"]) for a in soup.find_all("a", {"class": "text-link ellipsis"})]
-    while True:
-        sameLangForAll = None
-        sameResForAll = None
-        for a in range(len(animeList)):
-            print(f"{a}: {animeList[a][0]}")
-        seasonString = session.get(f"https://crunchyroll.com{animeList[int(input('Anime > '))][1]}").text
-        soup = BeautifulSoup(seasonString, "html.parser")
-        seasonList = []
-        episodeList = []
-        if soup.find("ul", {"class": "list-of-seasons cf"}).find("li")["class"] == ["season"]:
-            episodeList = [(e.find("img")["alt"], e["href"]) for e in soup.find("li", {"class": "season"}).find_all("a")]
+def downloadEpisodes(episodes, sameLangForAll, sameResForAll):
+    for episode in episodes:
+        if episode != driver.current_url:
+            driver.get(episode)
+        videodata = json.loads(driver.page_source.split("vilos.config.media = ")[1].split(";\n")[0])
+        streams = videodata["streams"]
+        currTitle = f"Episode {videodata['metadata']['display_episode_number']} - {videodata['metadata']['title']}"
+        print(f"--------{currTitle}--------")
+        subtitleList = []
+        for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "adaptive_dash"]]:
+            subtitleList.append((f"{s['hardsub_lang']} ({s['format'].replace('adaptive_','')})", s["url"]))
+        i = 0
+        if type(sameLangForAll) == str:
+            i = [sl[0] for sl in subtitleList].index(sameLangForAll)
         else:
-            seasonList = [(s.find("a")["title"], [(e.find("img")["alt"], e["href"]) for e in s.find_all("a")[1:]]) for s in soup.find_all("li", {"class": "season small-margin-bottom"})]
-        if len(seasonList) > 0:
-            for s in range(len(seasonList)):
-                print(f"{s}: {seasonList[s][0]}")
-            episodeList = seasonList[int(input("Season > "))][1]
-        episodesToDownload = []
-        while True:
-            print("-1: Start Download")
-            for e in range(len(episodeList)):
-                print(f"{e}: {episodeList[len(episodeList)-e-1][0]}")
-            i = int(input("Episode > "))
-            if i == -1:
-                break
-            elif not episodeList[len(episodeList)-i-1] in episodesToDownload:
-                episodesToDownload.append(episodeList[len(episodeList)-i-1])
-        file_dest = input("Download destination: ")
-        for e in episodesToDownload:
-            videodata = json.loads(session.get(f"https://crunchyroll.com{e[1]}").text.split("vilos.config.media = ")[1].split(";\n")[0])
-            #with open("videodata.json", "w", encoding="utf-8") as f:
-            #    json.dump(videodata, f, ensure_ascii=False, indent=4)
-            streams = videodata["streams"]
-            currTitle = f"Episode {videodata['metadata']['display_episode_number']} - {videodata['metadata']['title']}"
-            print(f"--------{currTitle}--------")
-            subtitleList = []
-            for s in [s0 for s0 in streams if s0["format"] in ["adaptive_hls", "adaptive_dash"]]:
-                subtitleList.append((f"{s['hardsub_lang']} ({s['format'].replace('adaptive_','')})", s["url"]))
-            i = 0
-            if type(sameLangForAll) == str:
-                i = [sl[0] for sl in subtitleList].index(sameLangForAll)
-            else:
-                for sl in range(len(subtitleList)):
-                    print(f"{sl}: {subtitleList[sl][0]}")
-                i = int(input("Subtitle Language > "))
-                if sameLangForAll == None:
-                    sameLangForAll = [False, subtitleList[i][0]][input("Use same subtitle language for all? (y/n): ").lower() == "y"]
-            subdata = subtitleList[i]
-            if subdata[0].endswith("(hls)"):
-                sameResForAll = downloadHLS(subdata[1], os.path.join(file_dest, f"{currTitle}.ts"), sameResForAll)
-            else:
-                downloadDash(subdata[1], os.path.join(file_dest, f"{currTitle}.mp4"))
-print("Initialization failed!")
+            for sl in range(len(subtitleList)):
+                print(f"{sl}: {subtitleList[sl][0]}")
+            i = int(input("Subtitle Language > "))
+            if sameLangForAll == None:
+                sameLangForAll = subtitleList[i][0] if input("Use same subtitle language for all? (y/n): ").lower() == "y" else False
+        subdata = subtitleList[i]
+        if subdata[0].endswith("(hls)"):
+            sameResForAll = downloadHLS(subdata[1], os.path.join(file_dest, f"{currTitle}.ts"), sameResForAll)
+        else:
+            downloadDash(subdata[1], os.path.join(file_dest, f"{currTitle}.mp4"))
+
+running = lambda: driver.get_log("driver")[-1]["message"] != "Unable to evaluate script: disconnected: not connected to DevTools\n"
+
+if not os.path.isdir(file_dest):
+    os.mkdir(file_dest)
+driver.get("https://www.crunchyroll.com/videos/anime/alpha?group=all")
+if dlmode and not textmode:
+    print("Navigate to an episode and the download will automatically start")
+while running:
+    if dlmode:
+        if textmode:
+            animeList = driver.find_elements_by_xpath("//a[@class='text-link ellipsis']")
+            for a in range(len(animeList)):
+                print(f"{a}: {animeList[a].text}")
+            driver.get(animeList[int(input("Anime > "))].get_attribute("href"))
+            seasonList = driver.find_elements_by_class_name("season")
+            episodeList = []
+            if len(seasonList) == 1:
+                episodeList = seasonList[0].find_elements_by_class_name("episode")
+            elif len(seasonList) > 1:
+                for s in range(len(seasonList)):
+                    print(f"{s}: {seasonList[s].find_element_by_class_name('season-dropdown').get_attribute('title')}")
+                episodeList = seasonList[int(input("Season > "))].find_elements_by_class_name("episode")
+            episodesToDownload = []
+            while True:
+                print("-1: Start Download")
+                for e in range(len(episodeList)):
+                    print(f"{e}: {episodeList[len(episodeList)-e-1].find_element_by_tag_name('img').get_attribute('alt')}")
+                i = int(input("Episode > "))
+                if i == -1: break
+                elif not episodeList[len(episodeList)-i-1].get_attribute("href") in episodesToDownload:
+                    episodesToDownload.append(episodeList[len(episodeList)-i-1].get_attribute("href"))
+            downloadEpisodes(episodesToDownload, None, None)
+        else:
+            if "/episode-" in driver.current_url and "vilos.config.media = " in driver.page_source:
+                downloadEpisodes([driver.current_url], False, False)
+    else:
+        time.sleep(1)
