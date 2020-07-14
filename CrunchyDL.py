@@ -10,8 +10,8 @@ from selenium.webdriver.chrome.options import Options
 localizeToUS = True
 log_in = False #False recommended for mpeg-dash and even then it's extremely slow (will (hopefully) soon be fixed)
 dlmode = True #True=download, False=watch in browser
-
 textmode = False
+
 file_dest = "test"#input("Output directory: ")
 if not os.path.isdir("tmp"): os.mkdir("tmp")
 
